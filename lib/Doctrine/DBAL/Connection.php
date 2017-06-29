@@ -84,6 +84,13 @@ class Connection implements DriverConnection
     const PARAM_STR_ARRAY = 102;
 
     /**
+     * For hex string arrays that get unhexed() into binary
+     *
+     * @var integer
+     */
+    const PARAM_HEX_ARRAY = 201;
+
+    /**
      * Offset by which PARAM_* constants are detected as arrays of the param type.
      *
      * @var integer
