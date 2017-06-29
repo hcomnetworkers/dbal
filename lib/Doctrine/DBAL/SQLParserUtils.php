@@ -158,7 +158,7 @@ class SQLParserUtils
         foreach ($types as $name => $type) {
             ++$bindIndex;
 
-            if ($type !== Connection::PARAM_INT_ARRAY && $type !== Connection::PARAM_STR_ARRAY) {
+            if ($type !== Connection::PARAM_INT_ARRAY && $type !== Connection::PARAM_STR_ARRAY && $type !== Connection::PARAM_HEX_ARRAY) {
                 continue;
             }
 
@@ -196,17 +196,20 @@ class SQLParserUtils
                     array_slice($params, $needle + 1)
                 );
 
+                $type = $types[$needle];
+                [$newType, $fill] = self::getNewTypeAndFill($type);
+
                 $types = array_merge(
                     array_slice($types, 0, $needle),
                     $count ?
                         // array needles are at {@link \Doctrine\DBAL\ParameterType} constants
                         // + {@link \Doctrine\DBAL\Connection::ARRAY_PARAM_OFFSET}
-                        array_fill(0, $count, $types[$needle] - Connection::ARRAY_PARAM_OFFSET) :
+                        array_fill(0, $count, $newType) :
                         [],
                     array_slice($types, $needle + 1)
                 );
 
-                $expandStr = $count ? implode(', ', array_fill(0, $count, '?')) : 'NULL';
+                $expandStr = $count ? implode(', ', array_fill(0, $count, $fill)) : 'NULL';
                 $query     = substr($query, 0, $needlePos) . $expandStr . substr($query, $needlePos + 1);
 
                 $paramOffset += $count - 1; // Grows larger by number of parameters minus the replaced needle.
@@ -236,12 +239,15 @@ class SQLParserUtils
                 continue;
             }
 
+            $type = static::extractParam($paramName, $types, false);
+            [$newType, $fill] = self::getNewTypeAndFill($type);
+
             $count     = count($value);
-            $expandStr = $count > 0 ? implode(', ', array_fill(0, $count, '?')) : 'NULL';
+            $expandStr = $count > 0 ? implode(', ', array_fill(0, $count, $fill)) : 'NULL';
 
             foreach ($value as $val) {
                 $paramsOrd[] = $val;
-                $typesOrd[]  = static::extractParam($paramName, $types, false) - Connection::ARRAY_PARAM_OFFSET;
+                $typesOrd[]  = $newType;
             }
 
             $pos         += $queryOffset;
@@ -307,5 +313,22 @@ class SQLParserUtils
         }
 
         throw SQLParserUtilsException::missingType($paramName);
+    }
+
+    /**
+     * Extract the new type and array fill for the array expansion
+     *
+     * @return mixed[] [integer, string]
+     */
+    private static function getNewTypeAndFill(int $type): array
+    {
+        if ($type === Connection::PARAM_HEX_ARRAY) {
+            $newType = \PDO::PARAM_STR;
+            $fill = 'unhex(?)';
+        } else {
+            $newType = $type - Connection::ARRAY_PARAM_OFFSET;
+            $fill = '?';
+        }
+        return [$newType, $fill];
     }
 }
